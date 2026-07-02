@@ -1,0 +1,30 @@
+# Environment variables (contains secrets - never commit this)
+.env
+
+# Compiled binaries
+/bin/
+/cmd/api/api
+inventory-system
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go workspace file
+go.work
+go.work.sum
+
+# GoLand / JetBrains IDE files
+.idea/
+
+# OS-generated files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
