@@ -6,6 +6,7 @@ type Item struct {
 	ID           int       `json:"id"`
 	Name         string    `json:"name"`
 	Category     string    `json:"category"`
+	Description  string    `json:"description"`
 	SerialNumber string    `json:"serial_number"`
 	ImageURL     string    `json:"image_url"`
 	Status       string    `json:"status"`

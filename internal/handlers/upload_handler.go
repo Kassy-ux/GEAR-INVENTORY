@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log"
 	"net/http"
 
 	"github.com/cloudinary/cloudinary-go/v2"
@@ -34,7 +35,14 @@ func (h *UploadHandler) UploadImage(c echo.Context) error {
 		Folder: "inventory-items",
 	})
 	if err != nil {
+		log.Printf("cloudinary upload error: %v", err)
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	log.Printf("cloudinary upload result: %+v", uploadResult)
+
+	if uploadResult.SecureURL == "" {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "upload succeeded but no URL was returned - check Cloudinary credentials"})
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{
