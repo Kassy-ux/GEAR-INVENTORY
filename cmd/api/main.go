@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"inventory-system/internal/config"
 	"inventory-system/internal/database"
+	"inventory-system/internal/routes"
 )
 
 func main() {
@@ -20,6 +21,11 @@ func main() {
 
 	log.Println("connected to database successfully")
 
+	cld, err := database.NewCloudinary(cfg)
+	if err != nil {
+		log.Fatalf("failed to init cloudinary: %v", err)
+	}
+
 	e := echo.New()
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
@@ -27,6 +33,9 @@ func main() {
 	e.GET("/health", func(c echo.Context) error {
 		return c.JSON(200, map[string]string{"status": "ok"})
 	})
+
+	routes.RegisterItemRoutes(e, db)
+	routes.RegisterUploadRoutes(e, cld)
 
 	log.Println("starting server on :8080")
 	e.Logger.Fatal(e.Start(":8080"))

@@ -12,7 +12,8 @@ CREATE TABLE items (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
     category VARCHAR(100),
-    serial_number VARCHAR(100),
+    description TEXT,
+    serial_number VARCHAR(100) UNIQUE,
     image_url VARCHAR(500),
     status ENUM('available','checked_out','maintenance') DEFAULT 'available',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
