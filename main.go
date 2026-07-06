@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/labstack/echo/v4"
+"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"inventory-system/internal/auth"
 	"inventory-system/internal/config"
@@ -21,6 +21,7 @@ func main() {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
 	defer db.Close()
+
 	log.Println("connected to database successfully")
 
 	cld, err := database.NewCloudinary(cfg)
@@ -54,4 +55,5 @@ func main() {
 
 	log.Println("starting server on :8080")
 	e.Logger.Fatal(e.Start(":8080"))
+}
 }
