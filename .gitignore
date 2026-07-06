@@ -28,3 +28,6 @@ Thumbs.db
 
 # Logs
 *.log
+.env
+migrations/000001_init_schema.up.sql
+migrations/000001_init_schema.down.sql

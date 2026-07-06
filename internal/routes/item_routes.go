@@ -4,6 +4,7 @@ import (
 	"database/sql"
 
 	"github.com/labstack/echo/v4"
+
 	"inventory-system/internal/handlers"
 )
 

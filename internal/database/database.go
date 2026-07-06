@@ -2,24 +2,29 @@ package database
 
 import (
 	"database/sql"
-	"fmt"
+	"log"
+	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+
 	"inventory-system/internal/config"
 )
 
+// Connect opens a MySQL connection pool using database/sql.
 func Connect(cfg *config.Config) (*sql.DB, error) {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
-		cfg.DBUser, cfg.DBPassword, cfg.DBHost, cfg.DBPort, cfg.DBName)
-
-	db, err := sql.Open("mysql", dsn)
+	conn, err := sql.Open("mysql", cfg.DatabaseDSN())
 	if err != nil {
 		return nil, err
 	}
 
-	if err := db.Ping(); err != nil {
+	conn.SetMaxOpenConns(25)
+	conn.SetMaxIdleConns(25)
+	conn.SetConnMaxLifetime(5 * time.Minute)
+
+	if err := conn.Ping(); err != nil {
 		return nil, err
 	}
 
-	return db, nil
+	log.Println("connected to database")
+	return conn, nil
 }
