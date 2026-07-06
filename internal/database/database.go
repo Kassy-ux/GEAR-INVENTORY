@@ -6,14 +6,15 @@ import (
 	"time"
 
 	_ "github.com/go-sql-driver/mysql"
+
+	"inventory-system/internal/config"
 )
 
 // Connect opens a MySQL connection pool using database/sql.
-// dsn format: user:password@tcp(host:port)/dbname?parseTime=true
-func Connect(dsn string) *sql.DB {
-	conn, err := sql.Open("mysql", dsn)
+func Connect(cfg *config.Config) (*sql.DB, error) {
+	conn, err := sql.Open("mysql", cfg.DatabaseDSN())
 	if err != nil {
-		log.Fatalf("unable to open database connection: %v", err)
+		return nil, err
 	}
 
 	conn.SetMaxOpenConns(25)
@@ -21,9 +22,9 @@ func Connect(dsn string) *sql.DB {
 	conn.SetConnMaxLifetime(5 * time.Minute)
 
 	if err := conn.Ping(); err != nil {
-		log.Fatalf("unable to reach database: %v", err)
+		return nil, err
 	}
 
 	log.Println("connected to database")
-	return conn
+	return conn, nil
 }

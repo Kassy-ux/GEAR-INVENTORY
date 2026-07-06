@@ -1,43 +1,38 @@
 package auth
 
 import (
-	"context"
-	"encoding/json"
 	"net/http"
 	"strings"
+
+	"github.com/labstack/echo/v4"
 )
 
-type contextKey string
-
-const AdminIDKey contextKey = "adminID"
-
-func RequireAdmin(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
+// RequireAdmin is an Echo middleware that protects routes so only
+// requests with a valid admin JWT can proceed.
+func RequireAdmin(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		authHeader := c.Request().Header.Get("Authorization")
 		if !strings.HasPrefix(authHeader, "Bearer ") {
-			writeJSONError(w, http.StatusUnauthorized, "missing or malformed authorization header")
-			return
+			return c.JSON(http.StatusUnauthorized, map[string]string{
+				"error": "missing or malformed authorization header",
+			})
 		}
 		tokenStr := strings.TrimPrefix(authHeader, "Bearer ")
 
 		claims, err := ParseToken(tokenStr)
 		if err != nil {
-			writeJSONError(w, http.StatusUnauthorized, "invalid or expired token")
-			return
+			return c.JSON(http.StatusUnauthorized, map[string]string{
+				"error": "invalid or expired token",
+			})
 		}
 
 		if claims.Role != "admin" {
-			writeJSONError(w, http.StatusForbidden, "admin access required")
-			return
+			return c.JSON(http.StatusForbidden, map[string]string{
+				"error": "admin access required",
+			})
 		}
 
-		ctx := context.WithValue(r.Context(), AdminIDKey, claims.AdminID)
-		next.ServeHTTP(w, r.WithContext(ctx))
-	})
-}
-
-func writeJSONError(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": message})
+		c.Set("adminID", claims.AdminID)
+		return next(c)
+	}
 }

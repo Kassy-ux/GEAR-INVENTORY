@@ -2,41 +2,58 @@ package main
 
 import (
 	"log"
-	"net/http"
-
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 
 	"inventory-system/internal/auth"
 	"inventory-system/internal/config"
 	"inventory-system/internal/database"
 	"inventory-system/internal/handlers"
 	"inventory-system/internal/routes"
+
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 func main() {
 	cfg := config.Load()
 	auth.SetSecret(cfg.JWTSecret)
 
-	conn := database.Connect(cfg.DatabaseDSN())
-	defer conn.Close()
+	db, err := database.Connect(cfg)
+	if err != nil {
+		log.Fatalf("failed to connect to database: %v", err)
+	}
+	defer db.Close()
 
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	log.Println("connected to database successfully")
 
-	// Public routes
-	r.Post("/login", handlers.LoginHandler(conn))
-	routes.RegisterItemRoutes(r, conn)
+	cld, err := database.NewCloudinary(cfg)
+	if err != nil {
+		log.Fatalf("failed to init cloudinary: %v", err)
+	}
 
-	// Admin-only routes
-	r.Group(func(r chi.Router) {
-		r.Use(auth.RequireAdmin)
-		r.Get("/admin/dashboard", handlers.DashboardHandler)
+	e := echo.New()
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{"http://localhost:3000"},
+		AllowMethods: []string{echo.GET, echo.POST, echo.PUT, echo.DELETE, echo.OPTIONS},
+		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAuthorization},
+	}))
+
+	e.GET("/health", func(c echo.Context) error {
+		return c.JSON(200, map[string]string{"status": "ok"})
 	})
 
-	log.Printf("listening on :%s", cfg.Port)
-	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {
-		log.Fatalf("server error: %v", err)
-	}
+	// Public auth route
+	e.POST("/login", handlers.LoginHandler(db))
+
+	// Admin-only routes
+	admin := e.Group("/admin")
+	admin.Use(auth.RequireAdmin)
+	admin.GET("/dashboard", handlers.DashboardHandler)
+
+	routes.RegisterItemRoutes(e, db)
+	routes.RegisterUploadRoutes(e, cld)
+
+	log.Println("starting server on :8080")
+	e.Logger.Fatal(e.Start(":8080"))
 }

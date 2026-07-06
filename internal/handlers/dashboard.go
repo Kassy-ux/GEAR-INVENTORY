@@ -1,17 +1,16 @@
 package handlers
 
 import (
-	"encoding/json"
 	"net/http"
 
-	"inventory-system/internal/auth"
+	"github.com/labstack/echo/v4"
 )
 
-func DashboardHandler(w http.ResponseWriter, r *http.Request) {
-	adminID, _ := r.Context().Value(auth.AdminIDKey).(string)
+// DashboardHandler is an example route protected by auth.RequireAdmin.
+func DashboardHandler(c echo.Context) error {
+	adminID, _ := c.Get("adminID").(string)
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	return c.JSON(http.StatusOK, map[string]string{
 		"message":  "welcome to the admin dashboard",
 		"admin_id": adminID,
 	})

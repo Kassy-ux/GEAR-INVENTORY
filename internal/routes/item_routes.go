@@ -3,17 +3,18 @@ package routes
 import (
 	"database/sql"
 
-	"github.com/go-chi/chi/v5"
+	"github.com/labstack/echo/v4"
+
 	"inventory-system/internal/handlers"
 )
 
-func RegisterItemRoutes(r chi.Router, db *sql.DB) {
+func RegisterItemRoutes(e *echo.Echo, db *sql.DB) {
 	h := handlers.NewItemHandler(db)
-	r.Route("/items", func(r chi.Router) {
-		r.Post("/", h.CreateItem)
-		r.Get("/", h.GetItems)
-		r.Get("/{id}", h.GetItemByID)
-		r.Put("/{id}", h.UpdateItem)
-		r.Delete("/{id}", h.DeleteItem)
-	})
+
+	items := e.Group("/items")
+	items.POST("", h.CreateItem)
+	items.GET("", h.GetItems)
+	items.GET("/:id", h.GetItemByID)
+	items.PUT("/:id", h.UpdateItem)
+	items.DELETE("/:id", h.DeleteItem)
 }
