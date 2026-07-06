@@ -3,14 +3,13 @@ package main
 import (
 	"log"
 
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"inventory-system/internal/auth"
 	"inventory-system/internal/config"
 	"inventory-system/internal/database"
 	"inventory-system/internal/handlers"
 	"inventory-system/internal/routes"
-
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 )
 
 func main() {
@@ -22,7 +21,6 @@ func main() {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
 	defer db.Close()
-
 	log.Println("connected to database successfully")
 
 	cld, err := database.NewCloudinary(cfg)
