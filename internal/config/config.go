@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -11,9 +12,11 @@ type Config struct {
 	DBUser     string
 	DBPassword string
 	DBHost     string
-	DBPort     string
-	DBName     string
-	JWTSecret  string
+
+	DBPort    string
+	DBName    string
+	JWTSecret string
+	Port      string
 
 	CloudinaryCloudName string
 	CloudinaryAPIKey    string
@@ -32,9 +35,15 @@ func Load() *Config {
 		DBPort:     os.Getenv("DB_PORT"),
 		DBName:     os.Getenv("DB_NAME"),
 		JWTSecret:  os.Getenv("JWT_SECRET"),
+		Port:       os.Getenv("PORT"),
 
 		CloudinaryCloudName: os.Getenv("CLOUDINARY_CLOUD_NAME"),
 		CloudinaryAPIKey:    os.Getenv("CLOUDINARY_API_KEY"),
 		CloudinaryAPISecret: os.Getenv("CLOUDINARY_API_SECRET"),
 	}
+}
+
+func (c *Config) DatabaseDSN() string {
+	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
+		c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName)
 }

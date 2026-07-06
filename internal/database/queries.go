@@ -1,4 +1,4 @@
-package queries
+package database
 
 import (
 	"context"
@@ -11,6 +11,7 @@ var ErrAdminNotFound = errors.New("admin not found")
 type Admin struct {
 	ID           int
 	Email        string
+	
 	PasswordHash string
 }
 

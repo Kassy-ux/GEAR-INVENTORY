@@ -34,3 +34,19 @@ func EmailExists(ctx context.Context, db *sql.DB, email string) (bool, error) {
 	).Scan(&exists)
 	return exists, err
 }
+
+
+func GetAdminByEmail(ctx context.Context, db *sql.DB, email string) (*Admin, error) {
+	var admin Admin
+	err := db.QueryRowContext(ctx,
+		`SELECT id, email, password_hash FROM admins WHERE email = ?`,
+		email,
+	).Scan(&admin.ID, &admin.Email, &admin.PasswordHash)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrAdminNotFound
+		}
+		return nil, err
+	}
+	return &admin, nil
+}

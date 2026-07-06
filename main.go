@@ -11,16 +11,14 @@ import (
 	"inventory-system/internal/config"
 	"inventory-system/internal/database"
 	"inventory-system/internal/handlers"
+	"inventory-system/internal/routes"
 )
 
 func main() {
 	cfg := config.Load()
 	auth.SetSecret(cfg.JWTSecret)
 
-	conn, err := database.Connect(cfg)
-	if err != nil {
-		log.Fatalf("failed to connect to database: %v", err)
-	}
+	conn := database.Connect(cfg.DatabaseDSN())
 	defer conn.Close()
 
 	r := chi.NewRouter()
@@ -29,6 +27,7 @@ func main() {
 
 	// Public routes
 	r.Post("/login", handlers.LoginHandler(conn))
+	routes.RegisterItemRoutes(r, conn)
 
 	// Admin-only routes
 	r.Group(func(r chi.Router) {

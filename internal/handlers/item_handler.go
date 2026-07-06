@@ -2,11 +2,12 @@ package handlers
 
 import (
 	"database/sql"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
 
-	"github.com/labstack/echo/v4"
+	"github.com/go-chi/chi/v5"
 	"inventory-system/internal/models"
 )
 
@@ -18,45 +19,49 @@ func NewItemHandler(db *sql.DB) *ItemHandler {
 	return &ItemHandler{DB: db}
 }
 
-// isDuplicateSerialError checks if a MySQL error is a unique constraint violation on serial_number
+func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	if v != nil {
+		json.NewEncoder(w).Encode(v)
+	}
+}
+
 func isDuplicateSerialError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "Duplicate entry") && strings.Contains(err.Error(), "serial_number")
 }
 
-// POST /items
-func (h *ItemHandler) CreateItem(c echo.Context) error {
+func (h *ItemHandler) CreateItem(w http.ResponseWriter, r *http.Request) {
 	var item models.Item
-	if err := c.Bind(&item); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
 	}
-
 	if item.Name == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "name is required"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+		return
 	}
-
 	if item.Status == "" {
 		item.Status = "available"
 	}
-
 	query := `INSERT INTO items (name, category, description, serial_number, image_url, status) VALUES (?, ?, ?, ?, ?, ?)`
 	result, err := h.DB.Exec(query, item.Name, item.Category, item.Description, item.SerialNumber, item.ImageURL, item.Status)
 	if err != nil {
 		if isDuplicateSerialError(err) {
-			return c.JSON(http.StatusConflict, map[string]string{"error": "an item with this serial number already exists"})
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "an item with this serial number already exists"})
+			return
 		}
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
 	}
-
 	id, _ := result.LastInsertId()
 	item.ID = int(id)
-
-	return c.JSON(http.StatusCreated, item)
+	writeJSON(w, http.StatusCreated, item)
 }
 
-// GET /items?name=laptop&category=Electronics
-func (h *ItemHandler) GetItems(c echo.Context) error {
-	nameFilter := c.QueryParam("name")
-	categoryFilter := c.QueryParam("category")
+func (h *ItemHandler) GetItems(w http.ResponseWriter, r *http.Request) {
+	nameFilter := r.URL.Query().Get("name")
+	categoryFilter := r.URL.Query().Get("category")
 
 	query := `SELECT id, name, category, COALESCE(description, ''), serial_number, image_url, status, created_at FROM items`
 	conditions := []string{}
@@ -66,19 +71,18 @@ func (h *ItemHandler) GetItems(c echo.Context) error {
 		conditions = append(conditions, "name LIKE ?")
 		args = append(args, "%"+nameFilter+"%")
 	}
-
 	if categoryFilter != "" {
 		conditions = append(conditions, "category = ?")
 		args = append(args, categoryFilter)
 	}
-
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
 
 	rows, err := h.DB.Query(query, args...)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
 	}
 	defer rows.Close()
 
@@ -86,80 +90,79 @@ func (h *ItemHandler) GetItems(c echo.Context) error {
 	for rows.Next() {
 		var item models.Item
 		if err := rows.Scan(&item.ID, &item.Name, &item.Category, &item.Description, &item.SerialNumber, &item.ImageURL, &item.Status, &item.CreatedAt); err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
 		}
 		items = append(items, item)
 	}
-
-	return c.JSON(http.StatusOK, items)
+	writeJSON(w, http.StatusOK, items)
 }
 
-// GET /items/:id
-func (h *ItemHandler) GetItemByID(c echo.Context) error {
-	id, err := strconv.Atoi(c.Param("id"))
+func (h *ItemHandler) GetItemByID(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		return
 	}
-
 	var item models.Item
 	query := `SELECT id, name, category, COALESCE(description, ''), serial_number, image_url, status, created_at FROM items WHERE id = ?`
 	err = h.DB.QueryRow(query, id).Scan(&item.ID, &item.Name, &item.Category, &item.Description, &item.SerialNumber, &item.ImageURL, &item.Status, &item.CreatedAt)
 	if err == sql.ErrNoRows {
-		return c.JSON(http.StatusNotFound, map[string]string{"error": "item not found"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "item not found"})
+		return
 	}
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
 	}
-
-	return c.JSON(http.StatusOK, item)
+	writeJSON(w, http.StatusOK, item)
 }
 
-// PUT /items/:id
-func (h *ItemHandler) UpdateItem(c echo.Context) error {
-	id, err := strconv.Atoi(c.Param("id"))
+func (h *ItemHandler) UpdateItem(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		return
 	}
-
 	var item models.Item
-	if err := c.Bind(&item); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	if err := json.NewDecoder(r.Body).Decode(&item); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
 	}
-
 	query := `UPDATE items SET name = ?, category = ?, description = ?, serial_number = ?, image_url = ?, status = ? WHERE id = ?`
 	result, err := h.DB.Exec(query, item.Name, item.Category, item.Description, item.SerialNumber, item.ImageURL, item.Status, id)
 	if err != nil {
 		if isDuplicateSerialError(err) {
-			return c.JSON(http.StatusConflict, map[string]string{"error": "an item with this serial number already exists"})
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "an item with this serial number already exists"})
+			return
 		}
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
 	}
-
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected == 0 {
-		return c.JSON(http.StatusNotFound, map[string]string{"error": "item not found"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "item not found"})
+		return
 	}
-
 	item.ID = id
-	return c.JSON(http.StatusOK, item)
+	writeJSON(w, http.StatusOK, item)
 }
 
-// DELETE /items/:id
-func (h *ItemHandler) DeleteItem(c echo.Context) error {
-	id, err := strconv.Atoi(c.Param("id"))
+func (h *ItemHandler) DeleteItem(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
 	if err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid id"})
+		return
 	}
-
 	result, err := h.DB.Exec(`DELETE FROM items WHERE id = ?`, id)
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
 	}
-
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected == 0 {
-		return c.JSON(http.StatusNotFound, map[string]string{"error": "item not found"})
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "item not found"})
+		return
 	}
-
-	return c.JSON(http.StatusNoContent, nil)
+	writeJSON(w, http.StatusNoContent, nil)
 }
