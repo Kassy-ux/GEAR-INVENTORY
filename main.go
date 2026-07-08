@@ -47,8 +47,9 @@ func main() {
 
 	// Admin-only routes
 	admin := e.Group("/admin")
-	admin.Use(auth.RequireAdmin)
+	admin.Use(auth.RequireAdmin(db))
 	admin.GET("/dashboard", handlers.DashboardHandler)
+    admin.POST("/logout", handlers.LogoutHandler(db))
 
 	routes.RegisterItemRoutes(e, db)
 	routes.RegisterUploadRoutes(e, cld)
