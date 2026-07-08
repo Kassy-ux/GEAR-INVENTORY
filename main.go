@@ -45,7 +45,8 @@ func main() {
 
 	// Public auth routes
 	e.POST("/login", handlers.LoginHandler(db))
-	
+	e.POST("/forgot-password", handlers.ForgotPasswordHandler(db))
+	e.POST("/reset-password", handlers.ResetPasswordHandler(db))
 
 	// Admin-only routes
 	admin := e.Group("/admin")
