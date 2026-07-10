@@ -59,6 +59,9 @@ func main() {
 	routes.RegisterItemRoutes(e, db)
 	routes.RegisterUploadRoutes(e, cld)
 
+	routes.RegisterBorrowerRoutes(e, db)
+	routes.RegisterLoanRoutes(e, db)
+
 	log.Println("starting server on :8080")
 	e.Logger.Fatal(e.Start(":8080"))
 }

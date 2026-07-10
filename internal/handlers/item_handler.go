@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
-
 	"inventory-system/internal/models"
 )
 
@@ -23,14 +22,17 @@ func isDuplicateSerialError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), "Duplicate entry") && strings.Contains(err.Error(), "serial_number")
 }
 
+// POST /items
 func (h *ItemHandler) CreateItem(c echo.Context) error {
 	var item models.Item
 	if err := c.Bind(&item); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 	}
+
 	if item.Name == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "name is required"})
 	}
+
 	if item.Status == "" {
 		item.Status = "available"
 	}
@@ -45,10 +47,18 @@ func (h *ItemHandler) CreateItem(c echo.Context) error {
 	}
 
 	id, _ := result.LastInsertId()
-	item.ID = int(id)
+
+	// Re-fetch the row so created_at (and any other DB-set defaults) reflect what MySQL actually stored
+	err = h.DB.QueryRow(`SELECT id, name, category, COALESCE(description, ''), serial_number, image_url, status, created_at FROM items WHERE id = ?`, id).
+		Scan(&item.ID, &item.Name, &item.Category, &item.Description, &item.SerialNumber, &item.ImageURL, &item.Status, &item.CreatedAt)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
 	return c.JSON(http.StatusCreated, item)
 }
 
+// GET /items?name=laptop&category=Electronics
 func (h *ItemHandler) GetItems(c echo.Context) error {
 	nameFilter := c.QueryParam("name")
 	categoryFilter := c.QueryParam("category")
@@ -61,10 +71,12 @@ func (h *ItemHandler) GetItems(c echo.Context) error {
 		conditions = append(conditions, "name LIKE ?")
 		args = append(args, "%"+nameFilter+"%")
 	}
+
 	if categoryFilter != "" {
 		conditions = append(conditions, "category = ?")
 		args = append(args, categoryFilter)
 	}
+
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
@@ -83,9 +95,11 @@ func (h *ItemHandler) GetItems(c echo.Context) error {
 		}
 		items = append(items, item)
 	}
+
 	return c.JSON(http.StatusOK, items)
 }
 
+// GET /items/:id
 func (h *ItemHandler) GetItemByID(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -101,9 +115,11 @@ func (h *ItemHandler) GetItemByID(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
+
 	return c.JSON(http.StatusOK, item)
 }
 
+// PUT /items/:id
 func (h *ItemHandler) UpdateItem(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -133,6 +149,7 @@ func (h *ItemHandler) UpdateItem(c echo.Context) error {
 	return c.JSON(http.StatusOK, item)
 }
 
+// DELETE /items/:id
 func (h *ItemHandler) DeleteItem(c echo.Context) error {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -149,5 +166,5 @@ func (h *ItemHandler) DeleteItem(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "item not found"})
 	}
 
-	return c.NoContent(http.StatusNoContent)
+	return c.JSON(http.StatusNoContent, nil)
 }
