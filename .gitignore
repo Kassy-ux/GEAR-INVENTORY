@@ -33,3 +33,5 @@ migrations/000001_init_schema.up.sql
 migrations/000001_init_schema.down.sql
 migrations/000002_add_revoked_tokens.up.sql
 migrations/000002_add_revoked_tokens.down.sql
+migrations/000004_add_user_roles.up.sql
+migrations/000004_add_user_roles.down.sql

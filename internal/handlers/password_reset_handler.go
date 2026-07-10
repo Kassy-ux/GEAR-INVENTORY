@@ -22,11 +22,16 @@ type ForgotPasswordRequest struct {
 	Email string `json:"email"`
 }
 
-// ForgotPasswordHandler generates a reset token for the given email and
-// (for now) logs the reset link to the server console instead of emailing
-// it. Swap the log.Printf for a real email send once an email provider
-// is wired up.
-func ForgotPasswordHandler(db *sql.DB) echo.HandlerFunc {
+// ForgotPasswordHandler generates a reset token for the given email.
+//
+// There is no real email service wired up yet. In development (appEnv
+// != "production"), the raw token is returned directly in the JSON
+// response and logged to the console, so the frontend can test the
+// full reset flow without needing the backend dev to manually relay
+// the token. In production, the token is ONLY ever logged/emailed —
+// never returned in the API response, since that would let anyone
+// reset any admin's password just by knowing their email.
+func ForgotPasswordHandler(db *sql.DB, appEnv string) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req ForgotPasswordRequest
 		if err := c.Bind(&req); err != nil {
@@ -36,15 +41,17 @@ func ForgotPasswordHandler(db *sql.DB) echo.HandlerFunc {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "email is required"})
 		}
 
+		genericResponse := map[string]string{
+			"message": "if that email exists, a reset link has been sent",
+		}
+
 		admin, err := queries.GetAdminByEmail(c.Request().Context(), db, req.Email)
 		if err != nil {
 			// Always return 200 here, even if the email doesn't exist.
 			// This prevents attackers from using this endpoint to figure
 			// out which emails are registered admins.
 			if errors.Is(err, queries.ErrAdminNotFound) {
-				return c.JSON(http.StatusOK, map[string]string{
-					"message": "if that email exists, a reset link has been sent",
-				})
+				return c.JSON(http.StatusOK, genericResponse)
 			}
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "something went wrong"})
 		}
@@ -59,15 +66,22 @@ func ForgotPasswordHandler(db *sql.DB) echo.HandlerFunc {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to create reset token"})
 		}
 
-		// TODO: replace with a real email send (e.g. SendGrid, Mailgun).
-		// The raw token must only ever be sent to the user directly —
-		// never store it, never return it in this response.
 		resetLink := "http://localhost:3000/reset-password?token=" + rawToken
 		log.Printf("[password reset] email=%s link=%s (expires in 30 min)", admin.Email, resetLink)
 
-		return c.JSON(http.StatusOK, map[string]string{
-			"message": "if that email exists, a reset link has been sent",
-		})
+		// DEV-ONLY: return the token directly so the frontend can test
+		// the full flow without a real email service. This branch must
+		// never run in production — it would let anyone reset any
+		// admin's password just by knowing their email address.
+		if appEnv != "production" {
+			return c.JSON(http.StatusOK, map[string]string{
+				"message":    "if that email exists, a reset link has been sent",
+				"dev_token":  rawToken,
+				"dev_notice": "this field only appears when APP_ENV is not 'production'",
+			})
+		}
+
+		return c.JSON(http.StatusOK, genericResponse)
 	}
 }
 
@@ -120,8 +134,6 @@ func ResetPasswordHandler(db *sql.DB) echo.HandlerFunc {
 
 // --- Token helpers ---
 
-// generateResetToken creates a random token, returning both the raw
-// value (sent to the user) and its SHA-256 hash (stored in the DB).
 func generateResetToken() (raw string, hash string, err error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {

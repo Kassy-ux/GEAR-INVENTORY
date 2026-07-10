@@ -2,11 +2,13 @@ package main
 
 import (
 	"log"
+	"time"
 
 	"inventory-system/internal/auth"
 	"inventory-system/internal/config"
 	"inventory-system/internal/database"
 	"inventory-system/internal/handlers"
+	"inventory-system/internal/notifier"
 	"inventory-system/internal/routes"
 
 	"github.com/labstack/echo/v4"
@@ -45,13 +47,15 @@ func main() {
 
 	// Public auth routes
 	e.POST("/login", handlers.LoginHandler(db))
-	e.POST("/forgot-password", handlers.ForgotPasswordHandler(db))
+	e.POST("/forgot-password", handlers.ForgotPasswordHandler(db, "http://localhost:3000"))
 	e.POST("/reset-password", handlers.ResetPasswordHandler(db))
 
 	// Admin-only routes
 	admin := e.Group("/admin")
 	admin.Use(auth.RequireAdmin(db))
 	admin.GET("/dashboard", handlers.DashboardHandler)
+	admin.GET("/notifications", handlers.ListNotificationsHandler(db))
+	admin.PUT("/notifications/:id/read", handlers.MarkNotificationReadHandler(db))
 
 	// Logout — requires a valid token, but isn't nested under /admin
 	e.POST("/logout", handlers.LogoutHandler(db), auth.RequireAdmin(db))
@@ -62,7 +66,9 @@ func main() {
 	routes.RegisterBorrowerRoutes(e, db)
 	routes.RegisterLoanRoutes(e, db)
 
+	// Background job: periodically scan for overdue loans and notify admins
+	go notifier.StartOverdueChecker(db, 10*time.Minute)
+
 	log.Println("starting server on :8080")
 	e.Logger.Fatal(e.Start(":8080"))
 }
-
