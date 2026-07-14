@@ -40,7 +40,6 @@ func (h *LoanHandler) CreateLoan(c echo.Context) error {
 	}
 	defer tx.Rollback()
 
-	// 1. Check item status
 	var status string
 	err = tx.QueryRow(`SELECT status FROM items WHERE id = ?`, req.ItemID).Scan(&status)
 	if err == sql.ErrNoRows {
@@ -53,7 +52,6 @@ func (h *LoanHandler) CreateLoan(c echo.Context) error {
 		return c.JSON(http.StatusConflict, map[string]string{"error": "item is not available for checkout"})
 	}
 
-	// 2. Confirm borrower exists
 	var borrowerExists bool
 	err = tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM borrowers WHERE id = ?)`, req.BorrowerID).Scan(&borrowerExists)
 	if err != nil {
@@ -63,7 +61,6 @@ func (h *LoanHandler) CreateLoan(c echo.Context) error {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "borrower not found"})
 	}
 
-	// 3. Create the loan
 	var dueDate interface{}
 	if req.DueDate != "" {
 		parsed, err := time.Parse("2006-01-02", req.DueDate)
@@ -80,7 +77,6 @@ func (h *LoanHandler) CreateLoan(c echo.Context) error {
 	}
 	loanID, _ := result.LastInsertId()
 
-	// 4. Update item status
 	_, err = tx.Exec(`UPDATE items SET status = 'checked_out' WHERE id = ?`, req.ItemID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -141,13 +137,20 @@ func (h *LoanHandler) ReturnLoan(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"message": "item returned successfully"})
 }
 
+const loanDetailsQuery = `
+	SELECT l.id, l.item_id, i.name, l.borrower_id, b.name, l.checked_out_at, l.due_date, l.returned_at
+	FROM loans l
+	JOIN items i ON l.item_id = i.id
+	JOIN borrowers b ON l.borrower_id = b.id
+`
+
 // GET /loans?active=true
 func (h *LoanHandler) GetLoans(c echo.Context) error {
 	activeOnly := c.QueryParam("active")
 
-	query := `SELECT id, item_id, borrower_id, checked_out_at, due_date, returned_at FROM loans`
+	query := loanDetailsQuery
 	if activeOnly == "true" {
-		query += ` WHERE returned_at IS NULL`
+		query += ` WHERE l.returned_at IS NULL`
 	}
 
 	rows, err := h.DB.Query(query)
@@ -156,10 +159,10 @@ func (h *LoanHandler) GetLoans(c echo.Context) error {
 	}
 	defer rows.Close()
 
-	loans := []models.Loan{}
+	loans := []models.LoanWithDetails{}
 	for rows.Next() {
-		var l models.Loan
-		if err := rows.Scan(&l.ID, &l.ItemID, &l.BorrowerID, &l.CheckedOutAt, &l.DueDate, &l.ReturnedAt); err != nil {
+		var l models.LoanWithDetails
+		if err := rows.Scan(&l.ID, &l.ItemID, &l.ItemName, &l.BorrowerID, &l.BorrowerName, &l.CheckedOutAt, &l.DueDate, &l.ReturnedAt); err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		}
 		loans = append(loans, l)
@@ -175,9 +178,10 @@ func (h *LoanHandler) GetLoanByID(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid id"})
 	}
 
-	var l models.Loan
-	err = h.DB.QueryRow(`SELECT id, item_id, borrower_id, checked_out_at, due_date, returned_at FROM loans WHERE id = ?`, id).
-		Scan(&l.ID, &l.ItemID, &l.BorrowerID, &l.CheckedOutAt, &l.DueDate, &l.ReturnedAt)
+	var l models.LoanWithDetails
+	query := loanDetailsQuery + ` WHERE l.id = ?`
+	err = h.DB.QueryRow(query, id).
+		Scan(&l.ID, &l.ItemID, &l.ItemName, &l.BorrowerID, &l.BorrowerName, &l.CheckedOutAt, &l.DueDate, &l.ReturnedAt)
 	if err == sql.ErrNoRows {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "loan not found"})
 	}
