@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -88,24 +89,35 @@ func ForgotPasswordHandler(db *sql.DB, appEnv string) echo.HandlerFunc {
 // --- Reset password ---
 
 type ResetPasswordRequest struct {
-	Token       string `json:"token"`
 	NewPassword string `json:"new_password"`
 }
 
+// ResetPasswordHandler expects the reset token as a Bearer token in the
+// Authorization header, exactly like every other authenticated route in
+// this API — not as a field in the JSON body. This keeps the token
+// handling consistent across the whole API and means the frontend never
+// needs a special case just for this one endpoint: whatever mechanism
+// already attaches a Bearer token to a request works here unchanged.
 func ResetPasswordHandler(db *sql.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		authHeader := c.Request().Header.Get("Authorization")
+		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "missing or invalid Authorization header"})
+		}
+		rawToken := strings.TrimPrefix(authHeader, "Bearer ")
+
 		var req ResetPasswordRequest
 		if err := c.Bind(&req); err != nil {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		}
-		if req.Token == "" || req.NewPassword == "" {
-			return c.JSON(http.StatusBadRequest, map[string]string{"error": "token and new_password are required"})
+		if req.NewPassword == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "new_password is required"})
 		}
 		if len(req.NewPassword) < 8 {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "password must be at least 8 characters"})
 		}
 
-		tokenHash := hashToken(req.Token)
+		tokenHash := hashToken(rawToken)
 
 		reset, err := queries.GetValidPasswordReset(c.Request().Context(), db, tokenHash)
 		if err != nil {
