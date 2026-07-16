@@ -17,6 +17,7 @@ type Config struct {
 	DBName    string
 	JWTSecret string
 	Port      string
+	AppEnv    string
 
 	CloudinaryCloudName string
 	CloudinaryAPIKey    string
@@ -36,6 +37,7 @@ func Load() *Config {
 		DBName:     os.Getenv("DB_NAME"),
 		JWTSecret:  os.Getenv("JWT_SECRET"),
 		Port:       os.Getenv("PORT"),
+		AppEnv:     getEnv("APP_ENV", "development"),
 
 		CloudinaryCloudName: os.Getenv("CLOUDINARY_CLOUD_NAME"),
 		CloudinaryAPIKey:    os.Getenv("CLOUDINARY_API_KEY"),
@@ -44,6 +46,18 @@ func Load() *Config {
 }
 
 func (c *Config) DatabaseDSN() string {
-	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true",
-		c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName)
+	return fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?parseTime=true&loc=UTC",
+		c.DBUser,
+		c.DBPassword,
+		c.DBHost,
+		c.DBPort,
+		c.DBName,
+	)
+}
+
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
